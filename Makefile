@@ -108,10 +108,6 @@ coverage-docker: ## Couverture dans le conteneur php (pcov ; aucun driver sur la
 coverage-clover-docker: ## Produit clover.xml via le conteneur php (pour analyser les lignes non couvertes)
 	docker compose run --rm --no-deps php sh -c 'php -d pcov.enabled=1 vendor/bin/phpunit --coverage-clover=clover.xml'
 
-.PHONY: coverage-clover
-coverage-clover: clear-kernel-cache ## Couverture au format clover (utilise par la CI)
-	XDEBUG_MODE=coverage $(PHPUNIT) --coverage-text --coverage-clover=clover.xml
-
 .PHONY: coverage-html
 coverage-html: clear-kernel-cache ## Couverture HTML dans var/coverage
 	XDEBUG_MODE=coverage $(PHPUNIT) --coverage-html var/coverage

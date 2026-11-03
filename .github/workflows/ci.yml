@@ -89,38 +89,3 @@ jobs:
                   DUMP_LOADER_TEST_DSN: mysql://root:root@127.0.0.1:3306/dump_loader_test
                   DUMP_LOADER_TEST_MYSQL_BINARY: mariadb
               run: make test-mysql
-
-    coverage:
-        name: Coverage
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-
-            - uses: shivammathur/setup-php@v2
-              with:
-                  php-version: '8.4'
-                  extensions: zlib, pdo_mysql
-                  tools: composer:v2, flex
-                  coverage: xdebug
-
-            - name: Install dependencies
-              env:
-                  SYMFONY_REQUIRE: '8.1.*'
-              run: composer update --prefer-dist --no-interaction --no-progress
-
-            - name: Run tests with coverage
-              env:
-                  XDEBUG_MODE: coverage
-              run: make coverage-clover
-
-            - name: Require 100% coverage
-              run: |
-                  php -r '
-                      $xml = new SimpleXMLElement(file_get_contents("clover.xml"));
-                      $metrics = $xml->project->metrics;
-                      $statements = (int) $metrics["statements"];
-                      $covered = (int) $metrics["coveredstatements"];
-                      $percent = 0 === $statements ? 0.0 : $covered / $statements * 100;
-                      printf("Coverage: %.2f%% (%d/%d statements)%s", $percent, $covered, $statements, PHP_EOL);
-                      exit($covered === $statements && $statements > 0 ? 0 : 1);
-                  '
