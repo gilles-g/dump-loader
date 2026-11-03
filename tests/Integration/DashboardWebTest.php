@@ -14,7 +14,6 @@ declare(strict_types=1);
 namespace DumpLoader\Tests\Integration;
 
 use DumpLoader\Dump\DumpSource;
-use DumpLoader\LoadJob\JobLock;
 use DumpLoader\LoadJob\LoadJob;
 use DumpLoader\LoadJob\LoadJobId;
 use DumpLoader\LoadJob\LoadJobRepository;
@@ -363,7 +362,7 @@ final class DashboardWebTest extends WebTestCase
     {
         $job = $this->aRunningJob();
 
-        self::assertTrue(self::service(JobLock::class)->acquire($job->id()));
+        $this->holdTheLockAsTheWorker($job->id());
 
         return $job;
     }

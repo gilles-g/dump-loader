@@ -16,7 +16,6 @@ namespace DumpLoader\Tests\Integration\Monitor;
 use DumpLoader\Dump\Dump;
 use DumpLoader\Dump\FileSize;
 use DumpLoader\LoadJob\AbortSignal;
-use DumpLoader\LoadJob\JobLock;
 use DumpLoader\LoadJob\LoadJob;
 use DumpLoader\LoadJob\LoadJobId;
 use DumpLoader\LoadJob\LoadJobRepository;
@@ -164,7 +163,7 @@ final class MonitorFollowsTheBundleTest extends KernelTestCase
         $job->startStep('restore_database');
 
         self::service(LoadJobRepository::class)->save($job);
-        self::assertTrue(self::service(JobLock::class)->acquire($job->id()));
+        $this->holdTheLockAsTheWorker($job->id());
 
         return $job;
     }

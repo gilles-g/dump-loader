@@ -13,11 +13,33 @@ declare(strict_types=1);
 
 namespace DumpLoader\Tests\Integration;
 
+use DumpLoader\LoadJob\File\FlockJobLock;
+use DumpLoader\LoadJob\LoadJobId;
 use DumpLoader\Tests\Integration\Stubs\Kernel;
+use PHPUnit\Framework\Attributes\After;
 use Symfony\Component\HttpKernel\KernelInterface;
 
 trait BootsTestKernel
 {
+    private ?FlockJobLock $workerLock = null;
+
+    protected function holdTheLockAsTheWorker(LoadJobId $id): void
+    {
+        $jobsDir = self::getContainer()->getParameter('dump_loader.jobs_dir');
+
+        self::assertIsString($jobsDir);
+
+        $this->workerLock ??= new FlockJobLock($jobsDir);
+
+        self::assertTrue($this->workerLock->acquire($id));
+    }
+
+    #[After]
+    protected function releaseTheWorkerLock(): void
+    {
+        $this->workerLock = null;
+    }
+
     /**
      * @param array<string, mixed> $options
      */

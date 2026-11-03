@@ -19,9 +19,17 @@ use DumpLoader\Step\StepDefinition;
 use DumpLoader\Tests\Double\EnglishLabels;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Tui\Widget\Util\StringUtils;
 
 final class OptionChecklistTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        if (!class_exists(StringUtils::class)) {
+            self::markTestSkipped('symfony/tui is not installed.');
+        }
+    }
+
     #[Test]
     public function it_should_tick_the_default_options_and_translate_the_labels(): void
     {
