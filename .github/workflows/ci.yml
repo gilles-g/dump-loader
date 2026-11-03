@@ -23,9 +23,6 @@ jobs:
                       symfony: '7.4.*'
                       tui: false
                     - php: '8.4'
-                      symfony: '8.0.*'
-                      tui: false
-                    - php: '8.4'
                       symfony: '8.1.*'
                       tui: true
         steps:
