@@ -24,21 +24,22 @@ final class RecordingStepTracker implements StepTracker
      */
     public array $messages = [];
 
-    private int $polls = 0;
-
+    /**
+     * @param (\Closure(): bool)|null $abortWhen
+     */
     private function __construct(
-        private readonly ?int $abortAfterPolls,
+        private readonly ?\Closure $abortWhen,
     ) {
     }
 
     public static function silent(): self
     {
-        return new self(abortAfterPolls: null);
+        return new self(abortWhen: null);
     }
 
-    public static function abortingAfterPolls(int $polls): self
+    public static function abortingWhen(\Closure $condition): self
     {
-        return new self(abortAfterPolls: $polls);
+        return new self(abortWhen: $condition);
     }
 
     public function log(LogTag $tag, string $message): void
@@ -52,10 +53,6 @@ final class RecordingStepTracker implements StepTracker
 
     public function abortRequested(): bool
     {
-        if (null === $this->abortAfterPolls) {
-            return false;
-        }
-
-        return ++$this->polls > $this->abortAfterPolls;
+        return null !== $this->abortWhen && ($this->abortWhen)();
     }
 }

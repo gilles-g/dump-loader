@@ -214,7 +214,7 @@ final class MysqlRestoreTest extends TestCase
     #[Test]
     public function it_should_leave_a_partial_database_and_no_connection_behind_when_aborted(): void
     {
-        $tracker = RecordingStepTracker::abortingAfterPolls(500);
+        $tracker = $this->abortingOnceBulkRowsAreCommitted();
 
         try {
             $this->client()->restore($this->database, $this->plainStream(self::$bulkDump), $tracker);
@@ -279,7 +279,7 @@ final class MysqlRestoreTest extends TestCase
     #[Test]
     public function it_should_leave_no_connection_behind_when_a_local_plain_restore_is_aborted(): void
     {
-        $tracker = RecordingStepTracker::abortingAfterPolls(500);
+        $tracker = $this->abortingOnceBulkRowsAreCommitted();
 
         try {
             $this->client()->restore($this->database, $this->localPlain(self::$bulkDump), $tracker);
@@ -294,7 +294,7 @@ final class MysqlRestoreTest extends TestCase
     #[Test]
     public function it_should_leave_no_connection_behind_when_a_local_gzipped_restore_is_aborted(): void
     {
-        $tracker = RecordingStepTracker::abortingAfterPolls(500);
+        $tracker = $this->abortingOnceBulkRowsAreCommitted();
 
         try {
             $this->client()->restore($this->database, $this->localGzipped(self::$bulkArchive), $tracker);
@@ -519,6 +519,17 @@ final class MysqlRestoreTest extends TestCase
         }
 
         return $this->fetchCount($sql);
+    }
+
+    private function abortingOnceBulkRowsAreCommitted(): RecordingStepTracker
+    {
+        return RecordingStepTracker::abortingWhen(function (): bool {
+            try {
+                return $this->fetchCount('SELECT COUNT(*) FROM `bulk`') > 0;
+            } catch (\PDOException) {
+                return false;
+            }
+        });
     }
 
     private function gzipFixture(string $name): SqlInput
