@@ -63,6 +63,17 @@ final class ShellCommandTest extends TestCase
     }
 
     #[Test]
+    public function it_should_mask_the_secrets_handed_with_its_arguments(): void
+    {
+        $command = new ShellCommand(argv: ['php', 'bin/console', 'app:set-password', '--password={password}'])
+            ->withArguments(['php', 'bin/console', 'app:set-password', '--password=s3cr3t'], ['s3cr3t', ''])
+            ->withInput([]);
+
+        self::assertSame('php bin/console app:set-password --password=***', $command->display());
+        self::assertSame('--password=s3cr3t', $command->argv[3]);
+    }
+
+    #[Test]
     public function it_should_display_just_the_argv_when_there_is_no_environment(): void
     {
         $command = new ShellCommand(argv: ['php', 'bin/console', 'cache:clear']);

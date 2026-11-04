@@ -19,6 +19,7 @@ final readonly class ReconcileLostJobs
         private LoadJobRepository $jobs,
         private VanishedJobs $vanished,
         private JobLock $lock,
+        private SensitiveInputs $sensitiveInputs,
     ) {
     }
 
@@ -43,6 +44,7 @@ final readonly class ReconcileLostJobs
             if ($this->vanished->suspects($job->snapshot())) {
                 $job->markLost();
                 $this->jobs->save($job);
+                $this->sensitiveInputs->discard($id);
             }
         } finally {
             $this->lock->release($id);

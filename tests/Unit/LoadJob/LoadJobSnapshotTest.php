@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace DumpLoader\Tests\Unit\LoadJob;
 
+use DumpLoader\LoadJob\InputValue;
+use DumpLoader\LoadJob\InputValues;
 use DumpLoader\LoadJob\LoadJob;
 use DumpLoader\LoadJob\LoadJobSnapshot;
 use DumpLoader\LoadJob\LoadJobStatus;
@@ -165,6 +167,56 @@ final class LoadJobSnapshotTest extends TestCase
         yield 'log is not an array' => ['log', 'queued'];
         yield 'log holds a scalar line' => ['log', ['lines' => ['queued'], 'omittedLines' => 0]];
         yield 'requestedAt is not a readable date' => ['requestedAt', 'yesterday'];
+        yield 'inputs is not an array' => ['inputs', 'insured_ids'];
+        yield 'inputs holds a scalar' => ['inputs', ['insured_ids']];
+        yield 'an input has no step' => ['inputs', [['name' => 'insured_ids', 'sensitive' => false, 'value' => 12]]];
+        yield 'an input value is a float' => ['inputs', [['step' => 'restrict', 'name' => 'insured_ids', 'sensitive' => false, 'value' => 1.5]]];
+        yield 'an input value is a map' => ['inputs', [['step' => 'restrict', 'name' => 'insured_ids', 'sensitive' => false, 'value' => ['a' => 12]]]];
+        yield 'an input value lists a string' => ['inputs', [['step' => 'restrict', 'name' => 'insured_ids', 'sensitive' => false, 'value' => [12, '34']]]];
+        yield 'a visible input has no value' => ['inputs', [['step' => 'restrict', 'name' => 'insured_ids', 'sensitive' => false]]];
+    }
+
+    #[Test]
+    public function it_should_read_a_snapshot_written_before_steps_took_inputs(): void
+    {
+        $data = $this->aRunningJob()->snapshot()->toArray();
+        unset($data['inputs']);
+
+        $rebuilt = LoadJobSnapshot::fromArray($data);
+
+        self::assertTrue($rebuilt->options->inputs->isEmpty());
+        self::assertSame(['clear_caches'], $rebuilt->options->names);
+    }
+
+    #[Test]
+    public function it_should_keep_the_entered_inputs_and_withhold_the_sensitive_ones_through_the_round_trip(): void
+    {
+        $job = LoadJob::request(
+            id: $this->aJobId(),
+            dump: $this->aDump(),
+            options: LoadOptions::fromNames(['restrict'])->withInputs(new InputValues(
+                InputValue::entered('restrict', 'insured_ids', [12, 34]),
+                InputValue::entered('restrict', 'password', 's3cr3t-value', sensitive: true),
+            )),
+            steps: $this->plannedSteps(),
+            requester: Requester::unknown(),
+            clock: $this->clock,
+        );
+
+        $json = json_encode($job->snapshot()->toArray(), \JSON_THROW_ON_ERROR);
+        $data = json_decode($json, true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($data);
+        $rebuilt = LoadJobSnapshot::fromArray($data);
+
+        self::assertStringNotContainsString('s3cr3t-value', $json);
+        self::assertSame([12, 34], $rebuilt->options->input('restrict', 'insured_ids'));
+        self::assertSame(
+            [
+                ['step' => 'restrict', 'name' => 'insured_ids', 'sensitive' => false, 'value' => [12, 34]],
+                ['step' => 'restrict', 'name' => 'password', 'sensitive' => true],
+            ],
+            $rebuilt->options->inputs->toArray(),
+        );
     }
 
     #[Test]

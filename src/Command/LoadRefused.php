@@ -25,6 +25,11 @@ final class LoadRefused extends \RuntimeException
         return new self(\sprintf('Cannot drop every table of "%s" without confirmation: pass --force to load without being asked.', $database));
     }
 
+    public static function cannotHide(string $step, string $input): self
+    {
+        return new self(\sprintf('Cannot ask for the sensitive "%s" input of step "%s" without hiding it: use --no-tui.', $input, $step));
+    }
+
     public static function withoutDump(): self
     {
         return new self('Cannot choose a dump without interaction: pass the path of the dump to load.');

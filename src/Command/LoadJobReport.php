@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace DumpLoader\Command;
 
+use DumpLoader\LoadJob\InputValue;
 use DumpLoader\LoadJob\LoadJobSnapshot;
 use DumpLoader\LoadJob\LoadJobStatus;
 use DumpLoader\LoadJob\PlannedStep;
@@ -35,6 +36,7 @@ final readonly class LoadJobReport
             ['Status' => $this->snapshot->status->value],
             ['Dump' => OutputFormatter::escape($this->snapshot->dumpName)],
             ['Options' => [] === $this->snapshot->options->names ? 'none' : implode(', ', $this->snapshot->options->names)],
+            ['Inputs' => $this->inputs()],
             ['Duration' => $this->duration()],
         );
         $io->table(['Step', 'Status'], array_map(
@@ -57,6 +59,18 @@ final readonly class LoadJobReport
     public function isSuccessful(): bool
     {
         return LoadJobStatus::Completed === $this->snapshot->status;
+    }
+
+    private function inputs(): string
+    {
+        if ($this->snapshot->options->inputs->isEmpty()) {
+            return 'none';
+        }
+
+        return implode("\n", array_map(
+            static fn (InputValue $value): string => OutputFormatter::escape(\sprintf('%s.%s = %s', $value->step, $value->name, $value->display())),
+            iterator_to_array($this->snapshot->options->inputs, false),
+        ));
     }
 
     private function duration(): string

@@ -17,12 +17,15 @@ use DumpLoader\Command\Labels;
 use DumpLoader\Command\LoadRefused;
 use DumpLoader\Dump\Dumps;
 use DumpLoader\LoadJob\FollowedLoadJob;
+use DumpLoader\LoadJob\InvalidStepInputs;
 use DumpLoader\LoadJob\LoadOptions;
+use DumpLoader\Step\StepInput;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Tui\Event\CancelEvent;
 use Symfony\Component\Tui\Event\InputEvent;
 use Symfony\Component\Tui\Event\SelectEvent;
 use Symfony\Component\Tui\Event\SelectionChangeEvent;
+use Symfony\Component\Tui\Event\SubmitEvent;
 use Symfony\Component\Tui\Event\TickEvent;
 use Symfony\Component\Tui\Input\Key;
 use Symfony\Component\Tui\Input\Keybindings;
@@ -31,9 +34,12 @@ use Symfony\Component\Tui\Terminal\TerminalInterface;
 use Symfony\Component\Tui\Tui;
 use Symfony\Component\Tui\Widget\AbstractWidget;
 use Symfony\Component\Tui\Widget\FocusableInterface;
+use Symfony\Component\Tui\Widget\InputWidget;
 use Symfony\Component\Tui\Widget\SelectListWidget;
 use Symfony\Component\Tui\Widget\TextWidget;
 use Symfony\Component\Tui\Widget\Util\StringUtils;
+
+use function Symfony\Component\String\u;
 
 final class TuiScreen implements LoadDumpScreen
 {
@@ -44,6 +50,7 @@ final class TuiScreen implements LoadDumpScreen
         private readonly ClockInterface $clock,
         private readonly TerminalInterface $terminal = new Terminal(),
         private readonly Keybindings $keybindings = new Keybindings(['toggle' => [Key::SPACE], 'abort' => ['ctrl+c']]),
+        private readonly ?LoadDumpScreen $hiddenPrompt = null,
     ) {
     }
 
@@ -97,6 +104,15 @@ final class TuiScreen implements LoadDumpScreen
         return $checklist->checked();
     }
 
+    public function enterInput(string $step, StepInput $input): string
+    {
+        if ($input->sensitive) {
+            return ($this->hiddenPrompt ?? throw LoadRefused::cannotHide($step, $input->name))->enterInput($step, $input);
+        }
+
+        return $this->askInput($step, $input, '');
+    }
+
     public function confirm(string $database): bool
     {
         $answer = $this->select(
@@ -141,6 +157,30 @@ final class TuiScreen implements LoadDumpScreen
         $this->run($this->question($question, $list));
 
         return $list->getSelectedItem()['value'] ?? throw LoadRefused::cancelled();
+    }
+
+    private function askInput(string $step, StepInput $input, string $refusal): string
+    {
+        $field = new InputWidget();
+        $field->setPrompt('> ');
+
+        $tui = $this->question(u(\sprintf(
+            "%s\n%s (%s) — Enter confirms, Esc cancels.",
+            $refusal,
+            StringUtils::stripControlBytes($this->labels->translate($input->label)),
+            $step,
+        ))->trimStart()->toString(), $field);
+        $field->onSubmit(static fn (SubmitEvent $event) => $tui->stop());
+
+        $this->run($tui);
+
+        try {
+            $input->read($step, $field->getValue());
+        } catch (InvalidStepInputs $invalid) {
+            return $this->askInput($step, $input, $invalid->getMessage());
+        }
+
+        return $field->getValue();
     }
 
     private function question(string $question, FocusableInterface&AbstractWidget $widget): Tui

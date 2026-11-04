@@ -31,11 +31,13 @@ final readonly class Screens
 
     public function open(InputInterface $input, OutputInterface $output, bool $tuiAllowed): LoadDumpScreen
     {
+        $console = new ConsoleScreen(new SymfonyStyle($input, $output), $this->clock, $this->labels);
+
         if ($tuiAllowed && $input->isInteractive() && class_exists(Tui::class) && $this->isTerminal($output)) {
-            return new TuiScreen($this->labels, $this->clock);
+            return new TuiScreen($this->labels, $this->clock, hiddenPrompt: $console);
         }
 
-        return new ConsoleScreen(new SymfonyStyle($input, $output), $this->clock, $this->labels);
+        return $console;
     }
 
     private function isTerminal(OutputInterface $output): bool

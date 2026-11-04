@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace DumpLoader\Tests\Unit\Command\Screen;
 
 use DumpLoader\Command\LoadRefused;
+use DumpLoader\Command\Screen\LoadDumpScreen;
 use DumpLoader\Command\Screen\TuiScreen;
 use DumpLoader\Dump\Dump;
 use DumpLoader\Dump\Dumps;
@@ -29,6 +30,8 @@ use DumpLoader\LoadJob\LogTag;
 use DumpLoader\LoadJob\Requester;
 use DumpLoader\LoadJob\VanishedJobs;
 use DumpLoader\Step\StepDefinition;
+use DumpLoader\Step\StepInput;
+use DumpLoader\Step\StepInputType;
 use DumpLoader\Tests\Double\EnglishLabels;
 use DumpLoader\Tests\Double\InMemoryLoadJobRepository;
 use DumpLoader\Tests\Unit\LoadJob\JobFixtures;
@@ -143,6 +146,66 @@ final class TuiScreenTest extends TestCase
         $this->expectExceptionObject(LoadRefused::cancelled());
 
         new TuiScreen(EnglishLabels::create(), $this->clock, $this->terminal)->chooseOptions([$this->anOption('run_migrations')], LoadOptions::none());
+    }
+
+    #[Test]
+    public function it_should_read_the_input_typed_by_the_operator(): void
+    {
+        $this->type('4', '2', self::ENTER);
+
+        $entry = new TuiScreen(EnglishLabels::create(), $this->clock, $this->terminal)
+            ->enterInput('assign_user', new StepInput('user_id', 'User id', StepInputType::Int));
+
+        self::assertSame('42', $entry);
+        self::assertStringContainsString('User id (assign_user)', $this->screen());
+    }
+
+    #[Test]
+    public function it_should_ask_again_for_an_input_until_it_is_valid(): void
+    {
+        $this->type('a', 'b', 'c', self::ENTER);
+        EventLoop::delay(0.3, function (): void {
+            $this->terminal->simulateInput('4');
+            $this->terminal->simulateInput('2');
+            $this->terminal->simulateInput(self::ENTER);
+        });
+
+        $entry = new TuiScreen(EnglishLabels::create(), $this->clock, $this->terminal)
+            ->enterInput('assign_user', new StepInput('user_id', 'User id', StepInputType::Int));
+
+        self::assertSame('42', $entry);
+        self::assertStringContainsString('The "user_id" input of step "assign_user" must be an integer.', $this->screen());
+    }
+
+    #[Test]
+    public function it_should_refuse_to_go_on_when_the_input_is_cancelled(): void
+    {
+        $this->type(self::ESCAPE);
+
+        $this->expectExceptionObject(LoadRefused::cancelled());
+
+        new TuiScreen(EnglishLabels::create(), $this->clock, $this->terminal)->enterInput('assign_user', new StepInput('user_id', 'User id'));
+    }
+
+    #[Test]
+    public function it_should_ask_for_a_sensitive_input_on_a_prompt_that_hides_it(): void
+    {
+        $password = new StepInput('password', 'Password', sensitive: true);
+        $loadDumpScreen = $this->createMock(LoadDumpScreen::class);
+        $loadDumpScreen->expects(self::once())->method('enterInput')->with('set_password', $password)->willReturn('s3cr3t');
+
+        $entry = new TuiScreen(EnglishLabels::create(), $this->clock, $this->terminal, hiddenPrompt: $loadDumpScreen)
+            ->enterInput('set_password', $password);
+
+        self::assertSame('s3cr3t', $entry);
+    }
+
+    #[Test]
+    public function it_should_refuse_to_ask_for_a_sensitive_input_it_cannot_hide(): void
+    {
+        $this->expectExceptionObject(LoadRefused::cannotHide('set_password', 'password'));
+
+        new TuiScreen(EnglishLabels::create(), $this->clock, $this->terminal)->enterInput('set_password', new StepInput('password', 'Password', sensitive: true));
     }
 
     #[Test]

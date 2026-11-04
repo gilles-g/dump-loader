@@ -35,6 +35,7 @@ final readonly class RequestLoadJobHandler
         private LockFactory $locks,
         private ClockInterface $clock,
         private int $retention,
+        private SensitiveInputs $sensitiveInputs,
     ) {
     }
 
@@ -53,20 +54,23 @@ final readonly class RequestLoadJobHandler
                 throw LoadJobAlreadyRunning::withId($active->id);
             }
 
+            $planned = $this->steps->plan($command->options);
+            $options = $command->options->withInputs($command->inputs->valuesFor($planned));
+
             $dump = $this->dumps->find($command->dumpPath);
             $this->restorePolicy->ensureRestorable($this->dumps->open($dump));
 
             $job = LoadJob::request(
                 id: LoadJobId::generate(),
                 dump: $dump,
-                options: $command->options,
-                steps: $this->plannedSteps($command->options),
+                options: $options,
+                steps: array_map(static fn (Step $step): PlannedStep => PlannedStep::fromDefinition($step->definition()), $planned),
                 requester: $command->requester,
                 clock: $this->clock,
             );
 
             $this->jobs->save($job);
-            $this->launch($job);
+            $this->launch($job, $options->inputs->sensitive());
 
             return $job->id();
         } finally {
@@ -74,22 +78,13 @@ final readonly class RequestLoadJobHandler
         }
     }
 
-    /**
-     * @return list<PlannedStep>
-     */
-    private function plannedSteps(LoadOptions $options): array
-    {
-        return array_map(
-            static fn (Step $step): PlannedStep => PlannedStep::fromDefinition($step->definition()),
-            $this->steps->plan($options),
-        );
-    }
-
-    private function launch(LoadJob $job): void
+    private function launch(LoadJob $job, InputValues $sensitive): void
     {
         try {
+            $this->sensitiveInputs->keep($job->id(), $sensitive);
             $this->launcher->launch($job->id());
         } catch (\Throwable $exception) {
+            $this->sensitiveInputs->discard($job->id());
             $job->fail($exception->getMessage());
             $this->jobs->save($job);
 

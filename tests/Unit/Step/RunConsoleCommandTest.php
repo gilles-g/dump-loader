@@ -17,13 +17,18 @@ use DumpLoader\Dump\Dump;
 use DumpLoader\Dump\FileSize;
 use DumpLoader\Execution\CommandFailed;
 use DumpLoader\Execution\ShellCommand;
+use DumpLoader\LoadJob\InputValue;
+use DumpLoader\LoadJob\InputValues;
 use DumpLoader\LoadJob\LoadJobId;
 use DumpLoader\LoadJob\LoadOptions;
 use DumpLoader\Step\LoadContext;
 use DumpLoader\Step\OptionalStep;
+use DumpLoader\Step\ParameterizedStep;
 use DumpLoader\Step\RunConsoleCommand;
 use DumpLoader\Step\StepDefinition;
 use DumpLoader\Step\StepFailed;
+use DumpLoader\Step\StepInput;
+use DumpLoader\Step\StepInputType;
 use DumpLoader\Step\StepTracker;
 use DumpLoader\Tests\Double\RecordingProcessRunner;
 use DumpLoader\Tests\Double\RecordingStepTracker;
@@ -75,6 +80,23 @@ final class RunConsoleCommandTest extends TestCase
     }
 
     #[Test]
+    public function it_should_fill_the_markers_of_its_arguments_with_the_entered_inputs(): void
+    {
+        $runner = RecordingProcessRunner::succeeding();
+        $step = self::parameterizedStep($runner);
+
+        $step->run(self::contextWith(new InputValues(
+            InputValue::entered('assign_user', 'user_id', 42),
+            InputValue::entered('assign_user', 'password', 's3cr3t', sensitive: true),
+        )), $this->createStub(StepTracker::class));
+
+        self::assertInstanceOf(ParameterizedStep::class, $step);
+        self::assertSame(['user_id', 'password'], array_map(static fn (StepInput $input): string => $input->name, $step->inputs()));
+        self::assertSame(['/app/bin/console', 'app:assign', '--user=42', '--password=s3cr3t', '{other}'], $runner->lastCommand()->argv);
+        self::assertSame('/app/bin/console app:assign --user=42 --password=*** {other}', $runner->lastCommand()->display());
+    }
+
+    #[Test]
     public function it_should_fail_the_step_when_the_console_command_exits_with_an_error(): void
     {
         $runner = RecordingProcessRunner::failingWith(1, ['SQLSTATE[42S02]: Base table or view not found']);
@@ -106,6 +128,35 @@ final class RunConsoleCommandTest extends TestCase
                 'UPDATE `admin` SET `password` = "hash";',
             ]),
             $enabledByDefault,
+        );
+    }
+
+    private static function parameterizedStep(RecordingProcessRunner $runner): RunConsoleCommand
+    {
+        return new RunConsoleCommand(
+            $runner,
+            new StepDefinition(
+                name: 'assign_user',
+                label: 'Assign a user',
+                description: '',
+                rank: StepDefinition::RANK_AFTER_LOAD,
+                weight: 1,
+            ),
+            new ShellCommand(['/app/bin/console', 'app:assign', '--user={user_id}', '--password={password}', '{other}']),
+            false,
+            [
+                new StepInput('user_id', 'User id', StepInputType::Int),
+                new StepInput('password', 'Password', sensitive: true),
+            ],
+        );
+    }
+
+    private static function contextWith(InputValues $values): LoadContext
+    {
+        return new LoadContext(
+            LoadJobId::generate(),
+            Dump::fromPath('2026-09-18.sql', FileSize::fromBytes(10), new \DateTimeImmutable('2026-09-18 10:00:00')),
+            LoadOptions::fromNames(['assign_user'])->withInputs($values),
         );
     }
 

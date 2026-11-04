@@ -17,6 +17,7 @@ use DumpLoader\Dump\Dumps;
 use DumpLoader\LoadJob\FollowedLoadJob;
 use DumpLoader\LoadJob\LoadOptions;
 use DumpLoader\Step\StepDefinition;
+use DumpLoader\Step\StepInput;
 
 interface LoadDumpScreen
 {
@@ -26,6 +27,8 @@ interface LoadDumpScreen
      * @param list<StepDefinition> $availableOptions
      */
     public function chooseOptions(array $availableOptions, LoadOptions $defaultOptions): LoadOptions;
+
+    public function enterInput(string $step, StepInput $input): string;
 
     public function confirm(string $database): bool;
 

@@ -19,6 +19,8 @@ use DumpLoader\Dump\DumpNotFound;
 use DumpLoader\Dump\DumpSource;
 use DumpLoader\Dump\SqlInput;
 use DumpLoader\Execution\LoadJobLauncher;
+use DumpLoader\LoadJob\InputEntries;
+use DumpLoader\LoadJob\InvalidStepInputs;
 use DumpLoader\LoadJob\JobLock;
 use DumpLoader\LoadJob\LoadJobAlreadyRunning;
 use DumpLoader\LoadJob\LoadJobId;
@@ -32,13 +34,18 @@ use DumpLoader\LoadJob\ReconcileLostJobs;
 use DumpLoader\LoadJob\Requester;
 use DumpLoader\LoadJob\RequestLoadJob;
 use DumpLoader\LoadJob\RequestLoadJobHandler;
+use DumpLoader\LoadJob\SensitiveInputs;
 use DumpLoader\LoadJob\UnreadableLoadJob;
 use DumpLoader\LoadJob\VanishedJobs;
 use DumpLoader\Step\StepDefinition;
+use DumpLoader\Step\StepInput;
+use DumpLoader\Step\StepInputType;
 use DumpLoader\Step\StepSequence;
 use DumpLoader\Tests\Double\FakeOptionalStep;
+use DumpLoader\Tests\Double\FakeParameterizedStep;
 use DumpLoader\Tests\Double\FakeStep;
 use DumpLoader\Tests\Double\InMemoryLoadJobRepository;
+use DumpLoader\Tests\Double\InMemorySensitiveInputs;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
@@ -212,9 +219,90 @@ final class RequestLoadJobHandlerTest extends TestCase
         self::assertCount(0, $jobs->history(10));
     }
 
+    #[Test]
+    public function it_should_refuse_invalid_inputs_without_planning_a_job(): void
+    {
+        $jobs = new InMemoryLoadJobRepository();
+
+        $loadJobLauncher = $this->createMock(LoadJobLauncher::class);
+        $loadJobLauncher->expects(self::never())->method('launch');
+
+        try {
+            ($this->handler($jobs, launcher: $loadJobLauncher))($this->aRestrictedRequest('abc', 'secret'));
+            self::fail('The inputs should have been refused.');
+        } catch (InvalidStepInputs $refusal) {
+            self::assertSame(['The "insured_ids" input of step "restrict_to_insured" must be a comma-separated list of integers.'], $refusal->problems);
+        }
+
+        self::assertTrue($jobs->history(10)->isEmpty());
+    }
+
+    #[Test]
+    public function it_should_record_the_inputs_converted_to_their_type(): void
+    {
+        $jobs = new InMemoryLoadJobRepository();
+
+        $id = ($this->handler($jobs))($this->aRestrictedRequest('12, 34', 'secret'));
+
+        self::assertSame([12, 34], $jobs->get($id)->snapshot()->options->input('restrict_to_insured', 'insured_ids'));
+    }
+
+    #[Test]
+    public function it_should_keep_the_sensitive_inputs_aside_for_the_run(): void
+    {
+        $jobs = new InMemoryLoadJobRepository();
+        $sensitiveInputs = new InMemorySensitiveInputs();
+
+        $id = ($this->handler($jobs, sensitiveInputs: $sensitiveInputs))($this->aRestrictedRequest('12', 's3cr3t-value'));
+
+        self::assertStringNotContainsString('s3cr3t-value', json_encode($jobs->get($id)->snapshot()->toArray(), \JSON_THROW_ON_ERROR));
+        self::assertSame('s3cr3t-value', $sensitiveInputs->take($id)->value('restrict_to_insured', 'password'));
+    }
+
+    #[Test]
+    public function it_should_discard_the_sensitive_inputs_of_a_job_that_could_not_be_launched(): void
+    {
+        $sensitiveInputs = new InMemorySensitiveInputs();
+
+        $launcher = $this->createStub(LoadJobLauncher::class);
+        $launcher->method('launch')->willThrowException(new \RuntimeException('php binary not found'));
+
+        try {
+            ($this->handler(new InMemoryLoadJobRepository(), launcher: $launcher, sensitiveInputs: $sensitiveInputs))($this->aRestrictedRequest('12', 's3cr3t-value'));
+            self::fail('The launch failure should have been rethrown.');
+        } catch (\RuntimeException) {
+        }
+
+        self::assertFalse($sensitiveInputs->holdsAnything());
+    }
+
+    #[Test]
+    public function it_should_discard_the_sensitive_inputs_of_a_job_found_lost(): void
+    {
+        $jobs = new InMemoryLoadJobRepository();
+        $sensitiveInputs = new InMemorySensitiveInputs();
+        $handler = $this->handler($jobs, lockIsFree: true, pendingGracePeriod: 0, sensitiveInputs: $sensitiveInputs);
+
+        $lost = $handler($this->aRestrictedRequest('12', 's3cr3t-value'));
+        $handler($this->aRequest());
+
+        self::assertSame(LoadJobStatus::Lost, $jobs->get($lost)->snapshot()->status);
+        self::assertFalse($sensitiveInputs->holdsAnything());
+    }
+
     private function aRequest(): RequestLoadJob
     {
         return new RequestLoadJob('dumps/prod-2026-09-18.sql.gz', LoadOptions::none(), Requester::unknown());
+    }
+
+    private function aRestrictedRequest(string $insuredIds, string $password): RequestLoadJob
+    {
+        return new RequestLoadJob(
+            'dumps/prod-2026-09-18.sql.gz',
+            LoadOptions::fromNames(['restrict_to_insured']),
+            Requester::unknown(),
+            new InputEntries(['restrict_to_insured' => ['insured_ids' => $insuredIds, 'password' => $password]]),
+        );
     }
 
     private function handler(
@@ -225,6 +313,7 @@ final class RequestLoadJobHandlerTest extends TestCase
         int $pendingGracePeriod = 60,
         ?RestorePolicy $restorePolicy = null,
         int $retention = 50,
+        SensitiveInputs $sensitiveInputs = new InMemorySensitiveInputs(),
     ): RequestLoadJobHandler {
         $clock = new MockClock('2026-09-18 08:00:00');
         $lock = $this->jobLock($lockIsFree);
@@ -235,13 +324,18 @@ final class RequestLoadJobHandlerTest extends TestCase
             steps: new StepSequence([
                 FakeOptionalStep::named('clear_caches', StepDefinition::RANK_CLEAR_CACHES, 1),
                 FakeStep::named('restore_database', StepDefinition::RANK_RESTORE_DATABASE),
+                FakeParameterizedStep::named('restrict_to_insured', 225, 1)->declaring(
+                    new StepInput('insured_ids', 'Insured ids', StepInputType::IntList),
+                    new StepInput('password', 'Password', sensitive: true),
+                ),
             ]),
             jobs: $jobs,
-            reconcileLostJobs: new ReconcileLostJobs($jobs, new VanishedJobs($lock, $clock, $pendingGracePeriod), $lock),
+            reconcileLostJobs: new ReconcileLostJobs($jobs, new VanishedJobs($lock, $clock, $pendingGracePeriod), $lock, $sensitiveInputs),
             launcher: $launcher ?? $this->createStub(LoadJobLauncher::class),
             locks: new LockFactory(new InMemoryStore()),
             clock: $clock,
             retention: $retention,
+            sensitiveInputs: $sensitiveInputs,
         );
     }
 

@@ -15,16 +15,20 @@ namespace DumpLoader\LoadJob;
 
 use DumpLoader\Dump\Dumps;
 use DumpLoader\Step\OptionalStep;
+use DumpLoader\Step\ParameterizedStep;
 use DumpLoader\Step\StepDefinition;
+use DumpLoader\Step\StepInput;
 
 final readonly class Dashboard
 {
     /**
-     * @param list<StepDefinition> $availableOptions
+     * @param list<StepDefinition>           $availableOptions
+     * @param array<string, list<StepInput>> $optionInputs
      */
     private function __construct(
         public Dumps $dumps,
         public array $availableOptions,
+        public array $optionInputs,
         public LoadOptions $defaultOptions,
         public ?LoadJobSnapshot $activeJob,
         public ?string $unreadableJobDetail,
@@ -49,6 +53,7 @@ final readonly class Dashboard
     ): self {
         $definitions = [];
         $defaults = [];
+        $inputs = [];
 
         foreach ($options as $option) {
             $definition = $option->definition();
@@ -56,6 +61,10 @@ final readonly class Dashboard
 
             if ($option->enabledByDefault()) {
                 $defaults[] = $definition->name;
+            }
+
+            if ($option instanceof ParameterizedStep) {
+                $inputs[$definition->name] = $option->inputs();
             }
         }
 
@@ -80,6 +89,7 @@ final readonly class Dashboard
         return new self(
             dumps: $dumps,
             availableOptions: $definitions,
+            optionInputs: $inputs,
             defaultOptions: LoadOptions::fromNames($defaults),
             activeJob: $activeJob,
             unreadableJobDetail: $unreadableJobDetail,
@@ -89,5 +99,13 @@ final readonly class Dashboard
             completedCount: $completedCount,
             failedCount: $failedCount,
         );
+    }
+
+    /**
+     * @return list<StepInput>
+     */
+    public function inputsOf(string $option): array
+    {
+        return $this->optionInputs[$option] ?? [];
     }
 }

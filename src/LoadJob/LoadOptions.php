@@ -20,12 +20,13 @@ final readonly class LoadOptions
      */
     private function __construct(
         public array $names,
+        public InputValues $inputs,
     ) {
     }
 
     public static function none(): self
     {
-        return new self([]);
+        return new self([], InputValues::none());
     }
 
     /**
@@ -33,20 +34,43 @@ final readonly class LoadOptions
      */
     public static function fromNames(array $names): self
     {
-        return new self(array_values(array_unique(array_filter($names, static fn (string $name): bool => '' !== $name))));
+        return new self(array_values(array_unique(array_filter($names, static fn (string $name): bool => '' !== $name))), InputValues::none());
+    }
+
+    public function withInputs(InputValues $inputs): self
+    {
+        return new self($this->names, $inputs);
+    }
+
+    public function revealedWith(InputValues $kept): self
+    {
+        return new self($this->names, $this->inputs->revealedWith($kept));
     }
 
     public function toggled(string $name): self
     {
         if ($this->includes($name)) {
-            return new self(array_values(array_filter($this->names, static fn (string $included): bool => $included !== $name)));
+            return new self(array_values(array_filter($this->names, static fn (string $included): bool => $included !== $name)), $this->inputs);
         }
 
-        return self::fromNames([...$this->names, $name]);
+        return self::fromNames([...$this->names, $name])->withInputs($this->inputs);
     }
 
     public function includes(string $name): bool
     {
         return \in_array($name, $this->names, true);
+    }
+
+    public function hasInput(string $step, string $name): bool
+    {
+        return $this->inputs->has($step, $name);
+    }
+
+    /**
+     * @return string|int|list<int>
+     */
+    public function input(string $step, string $name): string|int|array
+    {
+        return $this->inputs->value($step, $name);
     }
 }

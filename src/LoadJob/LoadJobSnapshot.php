@@ -14,6 +14,8 @@ declare(strict_types=1);
 namespace DumpLoader\LoadJob;
 
 /**
+ * @phpstan-import-type InputValueArray from InputValue
+ *
  * @phpstan-type SnapshotArray array{
  *     version: int,
  *     id: string,
@@ -22,6 +24,7 @@ namespace DumpLoader\LoadJob;
  *     dumpName: string,
  *     dumpSize: int,
  *     options: list<string>,
+ *     inputs: list<InputValueArray>,
  *     requester: string|null,
  *     steps: list<array{name: string, label: string, weight: int, status: string, startedAt: string|null, finishedAt: string|null}>,
  *     progress: array{stepNumber: int, stepCount: int, stepPercentage: float},
@@ -90,6 +93,7 @@ final readonly class LoadJobSnapshot
             'dumpName' => $this->dumpName,
             'dumpSize' => $this->dumpSize,
             'options' => $this->options->names,
+            'inputs' => $this->options->inputs->toArray(),
             'requester' => $this->requester->name,
             'steps' => array_map(static fn (PlannedStep $step): array => $step->toArray(), $this->steps),
             'progress' => $this->progress->toArray(),
@@ -120,7 +124,7 @@ final readonly class LoadJobSnapshot
             dumpPath: self::readString($data, 'dumpPath'),
             dumpName: self::readString($data, 'dumpName'),
             dumpSize: self::readInt($data, 'dumpSize'),
-            options: LoadOptions::fromNames(self::readStringList($data, 'options')),
+            options: LoadOptions::fromNames(self::readStringList($data, 'options'))->withInputs(self::readInputs($data)),
             requester: null === $requesterName ? Requester::unknown() : Requester::named($requesterName),
             steps: self::readSteps($data),
             progress: self::readProgress($data),
@@ -157,6 +161,18 @@ final readonly class LoadJobSnapshot
         }
 
         return $steps;
+    }
+
+    /**
+     * @param array<mixed> $data
+     */
+    private static function readInputs(array $data): InputValues
+    {
+        if (!\array_key_exists('inputs', $data)) {
+            return InputValues::none();
+        }
+
+        return InputValues::fromArray(self::readArray($data, 'inputs'));
     }
 
     /**

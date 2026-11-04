@@ -70,6 +70,11 @@
         .alert.ok { border-color: var(--success); background: #f1fdf9; }
         .muted { color: var(--muted); }
         .inline { align-items: center; display: flex; gap: .5rem; }
+        .option-inputs { margin: .5rem 0 .75rem 1.5rem; }
+        .option-inputs input { border: 1px solid #dee2e6; border-radius: .25rem; box-sizing: border-box; font: inherit; margin-bottom: .5rem; padding: .5rem .75rem; width: 100%; }
+        .option-inputs p { font-size: .8rem; margin: -.25rem 0 .5rem; }
+        .option:not(:has(input[type="checkbox"]:checked)) > .option-inputs { display: none; }
+        .inputs { font-size: .8rem; list-style: none; margin: .25rem 0 0; padding: 0; }
     </style>
     {% block stylesheets %}{% endblock %}
 </head>

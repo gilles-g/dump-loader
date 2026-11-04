@@ -5,6 +5,7 @@
         <span class="badge badge-{{ dashboard.activeJob.status.value }}">{{ ('status.' ~ dashboard.activeJob.status.value)|trans({}, 'DumpLoaderBundle') }}</span>
         {{ dashboard.activeJob.dumpName }}
     </p>
+    {{ include('@DumpLoader/_inputs.html.twig', {inputs: dashboard.activeJob.options.inputs}) }}
 
     <p><a href="{{ path('dump_loader_open_monitor') }}">{{ 'active.follow'|trans({}, 'DumpLoaderBundle') }}</a></p>
 </div>

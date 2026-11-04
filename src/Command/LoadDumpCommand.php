@@ -21,6 +21,8 @@ use DumpLoader\LoadJob\Dashboard;
 use DumpLoader\LoadJob\DashboardQuery;
 use DumpLoader\LoadJob\FollowedLoadJob;
 use DumpLoader\LoadJob\FollowLoadJobs;
+use DumpLoader\LoadJob\InputEntries;
+use DumpLoader\LoadJob\InvalidStepInputs;
 use DumpLoader\LoadJob\LoadJobAlreadyRunning;
 use DumpLoader\LoadJob\LoadOptions;
 use DumpLoader\LoadJob\Requester;
@@ -66,6 +68,7 @@ final class LoadDumpCommand extends Command implements SignalableCommandInterfac
             ->addArgument('dump', InputArgument::OPTIONAL, 'Path of the dump to load, as listed by the dashboard')
             ->addOption('option', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Optional step to run (repeatable)')
             ->addOption('no-options', null, InputOption::VALUE_NONE, 'Run no optional step')
+            ->addOption('input', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Value of a step input, as STEP.INPUT=VALUE (repeatable)')
             ->addOption('force', null, InputOption::VALUE_NONE, 'Do not ask before dropping every table of the target database')
             ->addOption('detach', null, InputOption::VALUE_NONE, 'Start the load job and return without following it')
             ->addOption('requester', null, InputOption::VALUE_REQUIRED, 'Name recorded as the requester of the load job')
@@ -102,7 +105,7 @@ final class LoadDumpCommand extends Command implements SignalableCommandInterfac
 
         try {
             $request = $this->request($input, $screen, $dashboard);
-        } catch (LoadRefused $refusal) {
+        } catch (LoadRefused|InvalidStepInputs $refusal) {
             $io->error($refusal->getMessage());
 
             return Command::FAILURE;
@@ -110,7 +113,7 @@ final class LoadDumpCommand extends Command implements SignalableCommandInterfac
 
         try {
             $id = ($this->requestLoadJobHandler)($request);
-        } catch (LoadJobAlreadyRunning|UnreadableLoadJob|DumpNotFound $refusal) {
+        } catch (LoadJobAlreadyRunning|UnreadableLoadJob|DumpNotFound|InvalidStepInputs $refusal) {
             $io->error($refusal->getMessage());
 
             return Command::FAILURE;
@@ -161,6 +164,7 @@ final class LoadDumpCommand extends Command implements SignalableCommandInterfac
     {
         $dumpPath = $this->dumpPath($input, $screen, $dashboard);
         $options = $this->options($input, $screen, $dashboard);
+        $entries = $this->entries($input, $screen, $dashboard, $options);
         $database = $dashboard->targetDatabase ?? 'the target database';
 
         if (!$input->getOption('force')) {
@@ -177,7 +181,29 @@ final class LoadDumpCommand extends Command implements SignalableCommandInterfac
             dumpPath: $dumpPath,
             options: $options,
             requester: $this->requester($input),
+            inputs: $entries,
         );
+    }
+
+    private function entries(InputInterface $input, LoadDumpScreen $screen, Dashboard $dashboard, LoadOptions $options): InputEntries
+    {
+        /** @var list<string> $given */
+        $given = $input->getOption('input');
+        $entries = InputEntries::fromCommandLine($given);
+
+        if (!$input->isInteractive()) {
+            return $entries;
+        }
+
+        foreach ($options->names as $step) {
+            foreach ($dashboard->inputsOf($step) as $stepInput) {
+                $entries = $entries->has($step, $stepInput->name)
+                    ? $entries
+                    : $entries->with($step, $stepInput->name, $screen->enterInput($step, $stepInput));
+            }
+        }
+
+        return $entries;
     }
 
     private function dumpPath(InputInterface $input, LoadDumpScreen $screen, Dashboard $dashboard): string

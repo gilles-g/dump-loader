@@ -1,8 +1,12 @@
 {% extends '@DumpLoader/base.html.twig' %}
 
 {% block body %}
+    {% set details = app.flashes('dump_loader_error_detail') %}
     {% for message in app.flashes('dump_loader_error') %}
-        <div class="alert">{{ message|trans({}, 'DumpLoaderBundle') }}</div>
+        <div class="alert">
+            {{ message|trans({}, 'DumpLoaderBundle') }}
+            {% if details[loop.index0] ?? false %}<div>{{ details[loop.index0] }}</div>{% endif %}
+        </div>
     {% endfor %}
 
     {% if not requirements.allSatisfied %}

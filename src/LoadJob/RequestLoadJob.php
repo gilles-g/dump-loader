@@ -19,6 +19,7 @@ final readonly class RequestLoadJob
         public string $dumpPath,
         public LoadOptions $options,
         public Requester $requester,
+        public InputEntries $inputs = new InputEntries(),
     ) {
     }
 }

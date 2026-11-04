@@ -30,6 +30,7 @@ final readonly class RunLoadJobHandler
         private JobLock $lock,
         private AbortSignal $abortSignal,
         private ClockInterface $clock,
+        private SensitiveInputs $sensitiveInputs,
     ) {
     }
 
@@ -55,6 +56,7 @@ final readonly class RunLoadJobHandler
         } finally {
             $this->jobs->save($job);
             $this->abortSignal->clear($command->id);
+            $this->sensitiveInputs->discard($command->id);
         }
     }
 
@@ -64,7 +66,7 @@ final readonly class RunLoadJobHandler
         $context = new LoadContext(
             id: $snapshot->id,
             dump: $this->dumps->find($snapshot->dumpPath),
-            options: $snapshot->options,
+            options: $snapshot->options->revealedWith($this->sensitiveInputs->take($snapshot->id)),
         );
 
         foreach ($snapshot->steps as $planned) {

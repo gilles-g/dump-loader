@@ -18,9 +18,11 @@ use DumpLoader\Dump\Dump;
 use DumpLoader\Dump\Dumps;
 use DumpLoader\LoadJob\FollowedLoadJob;
 use DumpLoader\LoadJob\LoadOptions;
+use DumpLoader\Step\StepInput;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Helper\ProgressBar;
+use Symfony\Component\Console\Question\Question;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 final readonly class ConsoleScreen implements LoadDumpScreen
@@ -59,6 +61,23 @@ final readonly class ConsoleScreen implements LoadDumpScreen
         }
 
         return LoadOptions::fromNames($chosen);
+    }
+
+    public function enterInput(string $step, StepInput $input): string
+    {
+        $question = new Question(\sprintf('%s (%s)', $this->labels->translate($input->label), $step));
+        $question->setHidden($input->sensitive);
+        $question->setValidator(static function (mixed $answer) use ($step, $input): string {
+            $entry = \is_string($answer) ? $answer : '';
+            $input->read($step, $entry);
+
+            return $entry;
+        });
+
+        $entry = $this->io->askQuestion($question);
+        \assert(\is_string($entry));
+
+        return $entry;
     }
 
     public function confirm(string $database): bool

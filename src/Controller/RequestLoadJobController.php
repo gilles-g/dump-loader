@@ -15,6 +15,8 @@ namespace DumpLoader\Controller;
 
 use DumpLoader\Dump\DumpNotFound;
 use DumpLoader\Dump\DumpNotRestorable;
+use DumpLoader\LoadJob\InputEntries;
+use DumpLoader\LoadJob\InvalidStepInputs;
 use DumpLoader\LoadJob\LoadJobAlreadyRunning;
 use DumpLoader\LoadJob\LoadOptions;
 use DumpLoader\LoadJob\RequestLoadJob;
@@ -53,12 +55,17 @@ final readonly class RequestLoadJobController
             return $this->back('flash.confirmation_required', $request);
         }
 
+        $options = LoadOptions::fromNames($this->checkedOptions($request));
+
         try {
             ($this->requestLoadJobHandler)(new RequestLoadJob(
                 dumpPath: (string) $request->request->get('dump'),
-                options: LoadOptions::fromNames($this->checkedOptions($request)),
+                options: $options,
                 requester: $this->currentRequester->current(),
+                inputs: InputEntries::fromForm($request->request->all('inputs'))->restrictedTo($options),
             ));
+        } catch (InvalidStepInputs $refusal) {
+            return $this->back('flash.invalid_inputs', $request, $refusal->getMessage());
         } catch (LoadJobAlreadyRunning) {
             return $this->back('flash.already_running', $request);
         } catch (UnreadableLoadJob) {
@@ -83,13 +90,14 @@ final readonly class RequestLoadJobController
         ));
     }
 
-    private function back(string $message, Request $request): RedirectResponse
+    private function back(string $message, Request $request, string $detail = ''): RedirectResponse
     {
         if ($request->hasSession()) {
             $session = $request->getSession();
 
             if ($session instanceof FlashBagAwareSessionInterface) {
                 $session->getFlashBag()->add('dump_loader_error', $message);
+                $session->getFlashBag()->add('dump_loader_error_detail', $detail);
             }
         }
 
