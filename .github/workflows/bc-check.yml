@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - .github/workflows/bc-check.yml
+      - .roave-backward-compatibility-check.xml
       - src/**
   push:
     branches: [main, '*.x']
     paths:
       - .github/workflows/bc-check.yml
+      - .roave-backward-compatibility-check.xml
       - src/**
 
 permissions:
