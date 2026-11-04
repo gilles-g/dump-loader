@@ -40,6 +40,34 @@ dump_loader:
 - `label` defaults to the key, `enabled_by_default` to `true`.
 - Keys: lowercase letters, digits, underscores. No built-in step name.
 
+### Inputs
+
+```yaml
+dump_loader:
+    after_load:
+        assign_user:
+            command: ['app:assign-user', '--user={user_id}', '--password={password}']
+            inputs:
+                user_id:
+                    label: 'User id'
+                    type: int
+                password:
+                    sensitive: true
+```
+
+| Key | Default | Purpose |
+|---|---|---|
+| `label` | the input name | Field label |
+| `description` | `''` | Help under the field |
+| `type` | `string` | `string`, `int` or `int_list` (`12, 34` becomes `12,34`) |
+| `required` | `true` | A blank optional input empties its marker |
+| `sensitive` | `false` | Hidden field, never shown nor stored, masked in the logs |
+
+- `{name}` in an item of `command` is replaced by the value, item by item, never through a shell.
+- Even `sensitive`, a filled marker is an argument of the console process: while it runs, `ps`
+  shows it to the other users of the host.
+- See [step inputs](steps.md#inputs) for the checks made before the load.
+
 ## Monitor settings
 
 The monitor boots before the app configuration. On every cache warm-up, the bundle publishes

@@ -103,6 +103,24 @@ dump_loader:
 Shows up as a checkbox in the UI. Need PHP? Implement `DumpLoader\Step\OptionalStep`, see
 [custom steps](doc/steps.md).
 
+A step can ask for inputs when the load is requested, typed in the UI or given on the command line:
+
+```yaml
+dump_loader:
+    after_load:
+        assign_user:
+            command: ['app:assign-user', '--user={user_id}']
+            inputs:
+                user_id: { label: 'User id', type: int }
+```
+
+```bash
+bin/console dump-loader:load dumps/prod.sql.gz --option=assign_user --input=assign_user.user_id=42 --force -n
+```
+
+The inputs are checked before anything is dropped. A `sensitive` input is never shown, logged nor
+stored in the job history. See [step inputs](doc/steps.md#inputs).
+
 ## Documentation
 
 - [Configuration](doc/configuration.md)

@@ -13,6 +13,7 @@ whatever is missing. Ctrl+C aborts the job.
 |---|---|
 | `--option=NAME` | Run this optional step, repeatable |
 | `--no-options` | Run no optional step |
+| `--input=STEP.INPUT=VALUE` | Value of a step input, repeatable; asked for when missing, refused with `-n` if required |
 | `--force` | Drop the tables without asking, required with `-n` |
 | `--detach` | Return once the job has started |
 | `--requester=NAME` | Recorded requester, defaults to `$USER` |

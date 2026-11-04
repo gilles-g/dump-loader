@@ -14,9 +14,10 @@ Public and documented:
 - `DumpLoader\Monitor\MonitorKernel` and its constructor `(string $environment, bool $debug,
   string $projectDir, string $mountPath, ?MonitorSettings $settings = null)`, mounted from an
   application's `public/index.php`, and `DumpLoader\Monitor\MonitorSettings`;
-- the extension points `DumpLoader\Step\Step`, `DumpLoader\Step\OptionalStep` and
-  `DumpLoader\Step\StepFactory`, and everything their
-  signatures reach: `StepDefinition`, `LoadContext`, `StepTracker`, `Percentage`, `LogTag`;
+- the extension points `DumpLoader\Step\Step`, `DumpLoader\Step\OptionalStep`,
+  `DumpLoader\Step\ParameterizedStep` and `DumpLoader\Step\StepFactory`, and everything their
+  signatures reach: `StepDefinition`, `StepInput`, `StepInputType`, `LoadContext`, `LoadOptions`,
+  `StepTracker`, `Percentage`, `LogTag`;
 - the service aliases an application can inject: `DumpSource`, `DatabaseClient`, `RestorePolicy`,
   `ProcessRunner`, `LoadJobRepository`, `AbortSignal`, `JobLock`, `LoadJobLauncher`,
   `TargetDatabase`, `StepSequence`, `CurrentRequester`, `CheckRequirements`, `DashboardQuery`,
@@ -117,6 +118,24 @@ application.
 `dump_loader.steps` is new and optional: each entry is handed to the `DumpLoader\Step\StepFactory`
 whose static `configurationKey()` matches, which builds a step. A key that no installed factory
 handles now fails the container build. Nothing changes for an application that does not use it.
+
+Steps can now ask for inputs: the new `DumpLoader\Step\ParameterizedStep` extends `OptionalStep`
+with `inputs(): list<StepInput>`, and an `after_load` command takes an optional `inputs` node whose
+`{name}` markers are filled in its arguments. A configuration without `inputs` and
+`LoadOptions::fromNames()` work as before; `LoadOptions` also carries the values entered, read with
+`input()` and `hasInput()`. A job snapshot gains an `inputs` list; the format version is unchanged
+and a job written earlier is still read, with no input.
+
+Sensitive values are held apart until the job starts by the new `DumpLoader\LoadJob\SensitiveInputs`
+port (`dump_loader.sensitive_inputs`). An application constructing `RequestLoadJobHandler`,
+`RunLoadJobHandler` or `ReconcileLostJobs` itself has to pass it as their last argument.
+`RunConsoleCommand` now implements `ParameterizedStep` and takes its inputs as an optional fifth
+argument. `RequestLoadJob` takes the raw entries as an optional `inputs` argument, and
+`DumpLoader\Command\Screen\LoadDumpScreen` gained `enterInput()`.
+
+The dashboard shows the fields of a checked step under its checkbox, and a refused request now
+flashes its reason under the alert, in `dump_loader_error_detail`. New translation keys:
+`request.optional_input` and `flash.invalid_inputs`.
 
 ## 1.0.0
 
