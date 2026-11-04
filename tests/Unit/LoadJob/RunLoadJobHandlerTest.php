@@ -31,6 +31,7 @@ use DumpLoader\Step\StepFailed;
 use DumpLoader\Step\StepSequence;
 use DumpLoader\Tests\Double\FakeStep;
 use DumpLoader\Tests\Double\InMemoryLoadJobRepository;
+use DumpLoader\Tests\Double\InMemorySensitiveInputs;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Clock\MockClock;
@@ -201,6 +202,7 @@ final class RunLoadJobHandlerTest extends TestCase
             lock: $lock,
             abortSignal: $signal ?? $this->abortSignal($abortRaised),
             clock: $clock,
+            sensitiveInputs: new InMemorySensitiveInputs(),
         );
     }
 

@@ -38,10 +38,12 @@ use DumpLoader\Execution\Process\SymfonyProcessRunner;
 use DumpLoader\Execution\Process\SynchronousLauncher;
 use DumpLoader\Execution\ProcessRunner;
 use DumpLoader\LoadJob\DashboardQuery;
+use DumpLoader\LoadJob\File\FileSensitiveInputs;
 use DumpLoader\LoadJob\FollowLoadJobs;
 use DumpLoader\LoadJob\ReconcileLostJobs;
 use DumpLoader\LoadJob\RequestLoadJobHandler;
 use DumpLoader\LoadJob\RunLoadJobHandler;
+use DumpLoader\LoadJob\SensitiveInputs;
 use DumpLoader\Monitor\MonitorSettings;
 use DumpLoader\Monitor\MonitorSettingsFile;
 use DumpLoader\Monitor\PublishMonitorSettings;
@@ -151,6 +153,7 @@ return static function (ContainerConfigurator $container): void {
             service('dump_loader.job_repository'),
             service('dump_loader.vanished_jobs'),
             service('dump_loader.job_lock'),
+            service('dump_loader.sensitive_inputs'),
         ])
     ;
 
@@ -160,6 +163,10 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set('dump_loader.launcher.synchronous', SynchronousLauncher::class)
         ->args([service('dump_loader.handler.run')])
+    ;
+
+    $services->set('dump_loader.sensitive_inputs', FileSensitiveInputs::class)
+        ->args([param('dump_loader.jobs_dir')])
     ;
 
     $services->set('dump_loader.handler.request', RequestLoadJobHandler::class)
@@ -173,6 +180,7 @@ return static function (ContainerConfigurator $container): void {
             service('lock.factory'),
             service('clock'),
             param('dump_loader.retention'),
+            service('dump_loader.sensitive_inputs'),
         ])
     ;
 
@@ -184,6 +192,7 @@ return static function (ContainerConfigurator $container): void {
             service('dump_loader.job_lock'),
             service('dump_loader.abort_signal'),
             service('clock'),
+            service('dump_loader.sensitive_inputs'),
         ])
     ;
 
@@ -299,4 +308,5 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(CurrentRequester::class, 'dump_loader.requester');
     $services->alias(CheckRequirements::class, 'dump_loader.check_requirements');
     $services->alias(DashboardQuery::class, 'dump_loader.dashboard_query');
+    $services->alias(SensitiveInputs::class, 'dump_loader.sensitive_inputs');
 };

@@ -27,18 +27,39 @@
             {% if dashboard.availableOptions|length %}
                 <p style="margin:1rem 0 .35rem"><strong>{{ 'request.options'|trans({}, 'DumpLoaderBundle') }}</strong></p>
                 {% for option in dashboard.availableOptions %}
-                    <div class="inline">
-                        <input type="checkbox"
-                               id="dump-loader-option-{{ option.name }}"
-                               name="options[]"
-                               value="{{ option.name }}"
-                               {{ dashboard.defaultOptions.includes(option.name) ? 'checked' : '' }}>
-                        <label for="dump-loader-option-{{ option.name }}" style="margin:0;font-weight:400">
-                            {{ option.label|trans({}, 'DumpLoaderBundle') }}
-                            {% if option.description is not empty %}
-                                <span class="muted">— {{ option.description|trans({}, 'DumpLoaderBundle') }}</span>
-                            {% endif %}
-                        </label>
+                    <div class="option">
+                        <div class="inline">
+                            <input type="checkbox"
+                                   id="dump-loader-option-{{ option.name }}"
+                                   name="options[]"
+                                   value="{{ option.name }}"
+                                   {{ dashboard.defaultOptions.includes(option.name) ? 'checked' : '' }}>
+                            <label for="dump-loader-option-{{ option.name }}" style="margin:0;font-weight:400">
+                                {{ option.label|trans({}, 'DumpLoaderBundle') }}
+                                {% if option.description is not empty %}
+                                    <span class="muted">— {{ option.description|trans({}, 'DumpLoaderBundle') }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        {% if dashboard.inputsOf(option.name)|length %}
+                            <div class="option-inputs">
+                                {% for input in dashboard.inputsOf(option.name) %}
+                                    {% set field = 'dump-loader-input-' ~ option.name ~ '-' ~ input.name %}
+                                    <label for="{{ field }}">
+                                        {{ input.label|trans({}, 'DumpLoaderBundle') }}
+                                        {% if not input.required %}<span class="muted">{{ 'request.optional_input'|trans({}, 'DumpLoaderBundle') }}</span>{% endif %}
+                                    </label>
+                                    <input id="{{ field }}"
+                                           name="inputs[{{ option.name }}][{{ input.name }}]"
+                                           type="{{ input.sensitive ? 'password' : 'text' }}"
+                                           {% if input.type.value != 'string' %}inputmode="numeric"{% endif %}
+                                           autocomplete="off">
+                                    {% if input.description is not empty %}
+                                        <p class="muted">{{ input.description|trans({}, 'DumpLoaderBundle') }}</p>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                 {% endfor %}
             {% endif %}

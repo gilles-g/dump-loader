@@ -20,6 +20,7 @@
                     <td><span class="badge badge-{{ snapshot.status.value }}">{{ ('status.' ~ snapshot.status.value)|trans({}, 'DumpLoaderBundle') }}</span></td>
                     <td>
                         {{ snapshot.dumpName }}
+                        {{ include('@DumpLoader/_inputs.html.twig', {inputs: snapshot.options.inputs}) }}
                         {% if snapshot.failureReason %}<div class="muted">{{ snapshot.failureReason }}</div>{% endif %}
                     </td>
                     <td>{{ snapshot.requester.isKnown ? snapshot.requester.name : 'history.unknown_requester'|trans({}, 'DumpLoaderBundle') }}</td>

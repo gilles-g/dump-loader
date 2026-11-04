@@ -44,11 +44,16 @@ use DumpLoader\LoadJob\RunLoadJobHandler;
 use DumpLoader\LoadJob\UnreadableLoadJob;
 use DumpLoader\LoadJob\VanishedJobs;
 use DumpLoader\Requirements\CheckRequirements;
+use DumpLoader\Step\Step;
+use DumpLoader\Step\StepInput;
+use DumpLoader\Step\StepInputType;
 use DumpLoader\Step\StepSequence;
 use DumpLoader\Tests\Double\EnglishLabels;
 use DumpLoader\Tests\Double\FakeOptionalStep;
+use DumpLoader\Tests\Double\FakeParameterizedStep;
 use DumpLoader\Tests\Double\FakeStep;
 use DumpLoader\Tests\Double\InMemoryLoadJobRepository;
+use DumpLoader\Tests\Double\InMemorySensitiveInputs;
 use DumpLoader\Tests\Double\ScriptedClock;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -367,6 +372,68 @@ final class LoadDumpCommandTest extends TestCase
         self::assertEquals(Requester::unknown(), $this->jobs->latest()->requester);
     }
 
+    #[Test]
+    public function it_should_hand_a_list_of_integers_given_on_the_command_line_to_a_parameterized_step(): void
+    {
+        $restrict = $this->restrictToInsured();
+        $tester = new CommandTester($this->command(parameterized: $restrict));
+
+        $exitCode = $tester->execute(
+            ['dump' => 'dumps/prod.sql.gz', '--option' => ['restrict_to_insured'], '--input' => ['restrict_to_insured.insured_ids=12, 34'], '--force' => true],
+            ['interactive' => false],
+        );
+
+        self::assertSame(Command::SUCCESS, $exitCode);
+        self::assertSame([12, 34], $restrict->lastContext?->options->input('restrict_to_insured', 'insured_ids'));
+        self::assertStringContainsString('restrict_to_insured.insured_ids = 12, 34', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function it_should_ask_again_for_an_input_of_a_chosen_step_until_it_is_valid(): void
+    {
+        $restrict = $this->restrictToInsured();
+        $tester = new CommandTester($this->command(parameterized: $restrict));
+        $tester->setInputs(['dumps/staging.sql', 'no', 'yes', 'no', 'abc', '12, 34', 'yes']);
+
+        $exitCode = $tester->execute([]);
+
+        self::assertSame(Command::SUCCESS, $exitCode);
+        self::assertSame([12, 34], $restrict->lastContext?->options->input('restrict_to_insured', 'insured_ids'));
+        self::assertStringContainsString('Insured ids (restrict_to_insured)', $tester->getDisplay());
+        self::assertStringContainsString('must be a comma-separated list of integers', $this->flat($tester));
+    }
+
+    #[Test]
+    public function it_should_not_ask_for_an_input_given_on_the_command_line(): void
+    {
+        $restrict = $this->restrictToInsured();
+        $tester = new CommandTester($this->command(parameterized: $restrict));
+
+        $exitCode = $tester->execute(['dump' => 'dumps/prod.sql.gz', '--option' => ['restrict_to_insured'], '--input' => ['restrict_to_insured.insured_ids=7'], '--force' => true]);
+
+        self::assertSame(Command::SUCCESS, $exitCode);
+        self::assertSame([7], $restrict->lastContext?->options->input('restrict_to_insured', 'insured_ids'));
+    }
+
+    #[Test]
+    public function it_should_refuse_an_input_not_written_as_step_input_value(): void
+    {
+        $tester = new CommandTester($this->command(parameterized: $this->restrictToInsured()));
+
+        $exitCode = $tester->execute(['dump' => 'dumps/prod.sql.gz', '--option' => ['restrict_to_insured'], '--input' => ['insured_ids=12'], '--force' => true]);
+
+        self::assertSame(Command::FAILURE, $exitCode);
+        self::assertStringContainsString('Cannot read the input "insured_ids=12": write it as STEP.INPUT=VALUE.', $this->flat($tester));
+        self::assertTrue($this->jobs->history(10)->isEmpty());
+    }
+
+    private function restrictToInsured(): FakeParameterizedStep
+    {
+        return FakeParameterizedStep::named('restrict_to_insured', 225, 1)->declaring(
+            new StepInput('insured_ids', 'Insured ids', StepInputType::IntList),
+        );
+    }
+
     private function command(
         ?LoadJobRepository $jobs = null,
         ?Dumps $dumps = null,
@@ -374,17 +441,20 @@ final class LoadDumpCommandTest extends TestCase
         ?LoadJobLauncher $launcher = null,
         ?AbortSignal $abortSignal = null,
         string $console = __FILE__,
+        ?Step $parameterized = null,
     ): LoadDumpCommand {
         $jobs ??= $this->jobs;
         $dumpSource = $this->dumpSource($dumps ?? new Dumps(
             Dump::fromPath('dumps/prod.sql.gz', FileSize::fromBytes(1024), new \DateTimeImmutable('2026-09-18 07:00:00')),
             Dump::fromPath('dumps/staging.sql', FileSize::fromBytes(2048), new \DateTimeImmutable('2026-09-17 22:00:00')),
         ));
-        $steps = new StepSequence([
+        $steps = new StepSequence(array_filter([
             $this->restore,
             FakeOptionalStep::named('run_migrations', 200)->onByDefault(),
             FakeOptionalStep::named('clear_caches', 300),
-        ]);
+            $parameterized,
+        ]));
+        $sensitiveInputs = new InMemorySensitiveInputs();
         $targetDatabaseDsn = new TargetDatabaseDsn('mysql://app:secret@127.0.0.1:3306/app');
         $abortSignal ??= $this->createStub(AbortSignal::class);
 
@@ -402,11 +472,12 @@ final class LoadDumpCommandTest extends TestCase
                 restorePolicy: $restorePolicy ?? $this->createStub(RestorePolicy::class),
                 steps: $steps,
                 jobs: $jobs,
-                reconcileLostJobs: new ReconcileLostJobs($jobs, $vanished, $lock),
-                launcher: $launcher ?? new SynchronousLauncher(new RunLoadJobHandler($jobs, $steps, $dumpSource, $lock, $abortSignal, $this->clock)),
+                reconcileLostJobs: new ReconcileLostJobs($jobs, $vanished, $lock, $sensitiveInputs),
+                launcher: $launcher ?? new SynchronousLauncher(new RunLoadJobHandler($jobs, $steps, $dumpSource, $lock, $abortSignal, $this->clock, $sensitiveInputs)),
                 locks: new LockFactory(new InMemoryStore()),
                 clock: $this->clock,
                 retention: 10,
+                sensitiveInputs: $sensitiveInputs,
             ),
             new FollowLoadJobs($jobs, $vanished, new AbortLoadJobHandler($jobs, $abortSignal)),
             new Screens($this->clock, EnglishLabels::create()),

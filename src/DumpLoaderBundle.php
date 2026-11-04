@@ -25,6 +25,8 @@ use DumpLoader\Step\RunMigrations;
 use DumpLoader\Step\Step;
 use DumpLoader\Step\StepDefinition;
 use DumpLoader\Step\StepFactory;
+use DumpLoader\Step\StepInput;
+use DumpLoader\Step\StepInputType;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -35,6 +37,15 @@ use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 use Symfony\Component\Process\PhpExecutableFinder;
 
+/**
+ * @phpstan-type AfterLoadCommand array{
+ *     label: string|null,
+ *     description: string,
+ *     enabled_by_default: bool,
+ *     command: list<string>,
+ *     inputs: array<string, array{label: string|null, description: string, type: string, required: bool, sensitive: bool}>,
+ * }
+ */
 final class DumpLoaderBundle extends AbstractBundle
 {
     public const string EXECUTION_DETACHED = 'detached';
@@ -114,6 +125,29 @@ final class DumpLoaderBundle extends AbstractBundle
                                 ->requiresAtLeastOneElement()
                                 ->scalarPrototype()->cannotBeEmpty()->end()
                             ->end()
+                            ->arrayNode('inputs')
+                                ->normalizeKeys(false)
+                                ->useAttributeAsKey('name')
+                                ->arrayPrototype()
+                                    ->children()
+                                        ->scalarNode('label')->defaultNull()->end()
+                                        ->scalarNode('description')->defaultValue('')->end()
+                                        ->enumNode('type')
+                                            ->values(array_map(static fn (StepInputType $type): string => $type->value, StepInputType::cases()))
+                                            ->defaultValue(StepInputType::String->value)
+                                        ->end()
+                                        ->booleanNode('required')->defaultTrue()->end()
+                                        ->booleanNode('sensitive')->defaultFalse()->end()
+                                    ->end()
+                                ->end()
+                                ->validate()
+                                    ->ifTrue(static fn (array $inputs): bool => [] !== array_filter(
+                                        array_keys($inputs),
+                                        static fn (string $name): bool => 1 !== preg_match('/^[a-z0-9_]+$/', $name),
+                                    ))
+                                    ->thenInvalid('Each input of an "after_load" command must be named with lowercase letters, digits and underscores only.')
+                                ->end()
+                            ->end()
                         ->end()
                     ->end()
                     ->validate()
@@ -152,7 +186,7 @@ final class DumpLoaderBundle extends AbstractBundle
      *     execution: string,
      *     pending_grace_period: int,
      *     retention: int,
-     *     after_load: array<string, array{label: string|null, description: string, enabled_by_default: bool, command: list<string>}>,
+     *     after_load: array<string, AfterLoadCommand>,
      *     steps: array<string, array<string, mixed>>,
      * } $config
      */
@@ -193,7 +227,7 @@ final class DumpLoaderBundle extends AbstractBundle
     }
 
     /**
-     * @param array<string, array{label: string|null, description: string, enabled_by_default: bool, command: list<string>}> $commands
+     * @param array<string, AfterLoadCommand> $commands
      */
     private function registerAfterLoadCommands(array $commands, ContainerBuilder $builder): void
     {
@@ -213,6 +247,18 @@ final class DumpLoaderBundle extends AbstractBundle
                     ['%dump_loader.php_binary%', '%dump_loader.console%', ...$command['command']],
                 ]),
                 $command['enabled_by_default'],
+                array_map(
+                    static fn (string $input, array $declared): Definition => new Definition(StepInput::class, [
+                        $input,
+                        $declared['label'] ?? $input,
+                        new Definition(StepInputType::class, [$declared['type']])->setFactory([StepInputType::class, 'from']),
+                        $declared['required'],
+                        $declared['sensitive'],
+                        $declared['description'],
+                    ]),
+                    array_keys($command['inputs']),
+                    array_values($command['inputs']),
+                ),
             ]);
 
             $builder->setDefinition('dump_loader.step.after_load.'.$name, $definition->addTag(Step::class));

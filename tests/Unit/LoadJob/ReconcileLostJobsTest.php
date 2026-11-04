@@ -23,6 +23,7 @@ use DumpLoader\LoadJob\LoadOptions;
 use DumpLoader\LoadJob\ReconcileLostJobs;
 use DumpLoader\LoadJob\Requester;
 use DumpLoader\LoadJob\VanishedJobs;
+use DumpLoader\Tests\Double\InMemorySensitiveInputs;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -172,7 +173,7 @@ final class ReconcileLostJobsTest extends TestCase
 
     private function reconcile(LoadJobRepository $jobs, JobLock $lock, ClockInterface $clock): ReconcileLostJobs
     {
-        return new ReconcileLostJobs($jobs, new VanishedJobs($lock, $clock, self::GRACE_PERIOD), $lock);
+        return new ReconcileLostJobs($jobs, new VanishedJobs($lock, $clock, self::GRACE_PERIOD), $lock, new InMemorySensitiveInputs());
     }
 
     private function repositoryListing(LoadJobSnapshot $listed, LoadJob $current): LoadJobRepository&MockObject

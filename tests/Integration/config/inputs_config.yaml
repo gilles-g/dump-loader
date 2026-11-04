@@ -1,0 +1,51 @@
+framework:
+    secret: 'dump-loader-test'
+    test: true
+    http_method_override: false
+    handle_all_throwables: true
+    php_errors:
+        log: true
+    session:
+        storage_factory_id: session.storage.factory.mock_file
+    csrf_protection: true
+    router:
+        utf8: true
+        resource: '%kernel.project_dir%/tests/Integration/config/routes.yaml'
+
+twig:
+    strict_variables: true
+
+services:
+    dump_loader.process_runner:
+        class: DumpLoader\Tests\Double\RecordingProcessRunner
+        factory: ['DumpLoader\Tests\Double\RecordingProcessRunner', 'succeeding']
+        public: true
+
+    dump_loader.database_client:
+        class: DumpLoader\Tests\Double\InMemoryDatabaseClient
+        factory: ['DumpLoader\Tests\Double\InMemoryDatabaseClient', 'accepting']
+        public: true
+
+dump_loader:
+    source:
+        directory: '%kernel.project_dir%/tests/Fixtures/dumps'
+    target_database:
+        dsn: 'mysql://loader:s3cr3t@127.0.0.1:3306/preprod'
+    var_dir: '%kernel.cache_dir%/dump-loader'
+    execution: synchronous
+    after_load:
+        assign_user:
+            label: 'Assign the user'
+            enabled_by_default: false
+            command: ['app:some-command', '--user={user_id}']
+            inputs:
+                user_id:
+                    label: 'User id'
+                    type: int
+        set_password:
+            enabled_by_default: false
+            command: ['app:set-password', '--password={password}']
+            inputs:
+                password:
+                    label: 'Password'
+                    sensitive: true

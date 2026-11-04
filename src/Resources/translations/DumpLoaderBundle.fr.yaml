@@ -11,6 +11,7 @@ request:
     title: 'Charger un dump'
     dump: 'Dump à charger'
     options: 'Options'
+    optional_input: '(facultatif)'
     submit: 'Charger ce dump'
     confirm: "Je comprends que le contenu de %database% sera écrasé."
     confirm_js: 'Le contenu de %database% sera écrasé. Continuer ?'
@@ -103,6 +104,7 @@ flash:
     already_running: 'Un chargement est déjà en cours.'
     unknown_dump: 'Ce dump n’existe plus dans la source.'
     dump_not_restorable: 'Ce dump ne peut pas être restauré dans la base cible (dump illisible, ou produit avec mysqldump --databases) : rien n’a été chargé.'
+    invalid_inputs: 'Les paramètres saisis sont refusés : rien n’a été chargé.'
     unreadable_job: 'Un fichier de job est illisible, un chargement est donc peut-être encore en cours : rien n’a été chargé.'
     abort_invalid_token: 'Le jeton du formulaire était invalide : le chargement n’a pas été interrompu.'
     abort_unknown_job: 'Ce chargement n’existe plus : rien n’a été interrompu.'

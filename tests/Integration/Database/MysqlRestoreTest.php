@@ -47,6 +47,7 @@ use DumpLoader\Step\RestoreDatabase;
 use DumpLoader\Step\Step;
 use DumpLoader\Step\StepSequence;
 use DumpLoader\Tests\Double\InMemoryLoadJobRepository;
+use DumpLoader\Tests\Double\InMemorySensitiveInputs;
 use DumpLoader\Tests\Double\RecordingStepTracker;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
@@ -421,7 +422,7 @@ final class MysqlRestoreTest extends TestCase
         $jobLock = $this->createStub(JobLock::class);
         $jobLock->method('acquire')->willReturn(true);
 
-        (new RunLoadJobHandler($jobs, $steps, $dumpSource, $jobLock, $this->createStub(AbortSignal::class), $clock))(new RunLoadJob($job->id()));
+        (new RunLoadJobHandler($jobs, $steps, $dumpSource, $jobLock, $this->createStub(AbortSignal::class), $clock, new InMemorySensitiveInputs()))(new RunLoadJob($job->id()));
 
         return $jobs->get($job->id())->snapshot();
     }

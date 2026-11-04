@@ -1,0 +1,7 @@
+{% if not inputs.isEmpty %}
+    <ul class="muted inputs">
+        {% for value in inputs %}
+            <li>{{ value.step }}.{{ value.name }} = {{ value.display }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
